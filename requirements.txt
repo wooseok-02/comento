@@ -4,9 +4,10 @@ openai
 langchain
 langchain-openai
 langchain-community
+langchain-chroma
 langchain-text-splitters
 langchain-tavily
 langgraph
-faiss-cpu
+chromadb
 pypdf
 supabase

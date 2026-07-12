@@ -1,6 +1,6 @@
 import streamlit as st
 from core.chatbot.chat_response import generate_chat_response
-from core.document_download import read_document_file_for_download
+from core.supabase_resource_manager import create_resource_signed_url
 
 from core.chatbot.chat_room import (
     create_chat_room,
@@ -139,26 +139,18 @@ def render_chat_messages_area(chat_room_id):
                 if sources:
                     with st.expander("출처 자세히 보기"):
                         for source in sources:
-                            download_result = read_document_file_for_download(
-                                source.get("file_path")
-                            )
                             source_type = source.get("source_type")
                             title = source.get("title", "알 수 없는 문서")
                             category = source.get("category")
+                            signed_url_result = create_resource_signed_url(source)
 
                             st.caption(f"source_type: {source_type}")
                             st.caption(f"category: {category}")
 
-                            if download_result["success"]:
-                                st.download_button(
-                                    label=title,
-                                    data=download_result["file_bytes"],
-                                    file_name=title,
-                                    mime="application/octet-stream",
-                                    key=f"download_source_{message['message_id']}_{title}",
-                                )
+                            if signed_url_result["success"]:
+                                st.link_button(title, signed_url_result["url"])
                             else:
-                                st.warning(download_result["error_message"])
+                                st.warning(signed_url_result["message"])
 
 
 # 선택된 대화방에 새 메시지를 입력하고 저장한다.

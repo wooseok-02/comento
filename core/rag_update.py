@@ -1,26 +1,20 @@
-# 활성 상태이고 처리 완료된 문서만 벡터 DB 재생성 대상으로 가져온다.
-from pathlib import Path
-from core.document_pipeline import load_document_metadata
-from core.document_pipeline import extract_text_from_file
 from langchain_core.documents import Document
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from core.chroma_vector_store import reset_chroma_collection
+from core.document_pipeline import extract_text_from_file_bytes
+from core.supabase_document_manager import download_document_file_bytes
+from core.supabase_document_manager import get_active_completed_documents as get_supabase_active_completed_documents
 
-def get_active_completed_documents(metadata_path):
-    documents = load_document_metadata(metadata_path)
 
-    return [
-        document
-        for document in documents
-        if document.get("is_active") is True
-        and document.get("status") == "completed"
-    ]
+# 활성 상태이고 처리 완료된 문서만 Supabase에서 가져온다.
+def get_active_completed_documents(metadata_path=None):
+    return get_supabase_active_completed_documents()
 
-# 활성 문서 목록을 기준으로 FAISS 벡터 DB를 새로 생성한다.
-def rebuild_vector_store(metadata_path, vector_store_dir):
-    target_documents = get_active_completed_documents(metadata_path)
+
+# 활성 문서 목록을 기준으로 Chroma Cloud 벡터 DB를 새로 생성한다.
+def rebuild_vector_store(metadata_path=None, vector_store_dir=None):
+    target_documents = get_active_completed_documents()
 
     if not target_documents:
         return {
@@ -38,10 +32,10 @@ def rebuild_vector_store(metadata_path, vector_store_dir):
     split_documents = []
 
     for document_metadata in target_documents:
-        file_path = Path(document_metadata["file_path"])
         file_type = document_metadata["file_type"]
 
-        extracted_text = extract_text_from_file(file_path, file_type)
+        file_bytes = download_document_file_bytes(document_metadata)
+        extracted_text = extract_text_from_file_bytes(file_bytes, file_type)
 
         if not extracted_text.strip():
             continue
@@ -53,6 +47,8 @@ def rebuild_vector_store(metadata_path, vector_store_dir):
                 "file_name": document_metadata["file_name"],
                 "category": document_metadata["category"],
                 "file_path": document_metadata["file_path"],
+                "storage_bucket": document_metadata.get("storage_bucket"),
+                "storage_path": document_metadata.get("storage_path"),
                 "is_active": document_metadata["is_active"],
             },
         )
@@ -67,14 +63,12 @@ def rebuild_vector_store(metadata_path, vector_store_dir):
             "chunk_count": 0,
         }
 
-    embeddings = OpenAIEmbeddings()
-
-    vector_store = FAISS.from_documents(
-        documents=split_documents,
-        embedding=embeddings,
-    )
-
-    vector_store.save_local(str(vector_store_dir))
+    vector_store = reset_chroma_collection()
+    vector_ids = [
+        f"{document.metadata.get('document_id')}_{index}"
+        for index, document in enumerate(split_documents)
+    ]
+    vector_store.add_documents(documents=split_documents, ids=vector_ids)
 
     return {
         "success": True,

@@ -2,22 +2,46 @@
 
 ## bucket
 ```text
+uploaded-documents
 generated-files
 ```
 
-## 저장 경로
+## uploaded-documents 저장 경로
+```text
+documents/{document_id}/{file_name}
+```
+
+## generated-files 저장 경로
 ```text
 reports/{file_name}
 meeting_notes/{file_name}
+files/{file_name}
 ```
 
-## 저장 대상
-- 보고서 markdown 파일
-- 회의록 markdown 파일
+# documents table
+
+공통 문서 metadata를 저장한다.
+
+```sql
+create table documents (
+  document_id text primary key,
+  file_name text not null,
+  category text not null,
+  file_type text not null,
+  file_hash text not null unique,
+  file_path text,
+  storage_bucket text not null,
+  storage_path text not null,
+  status text not null default 'completed',
+  status_message text,
+  is_active boolean not null default true,
+  created_at timestamp with time zone default now()
+);
+```
 
 # resources table
 
-Supabase Database에 생성할 table이다.
+개인/Teams 자료 metadata를 저장한다.
 
 ```sql
 create table resources (
@@ -35,11 +59,37 @@ create table resources (
 );
 ```
 
-# 컬럼 설명
+# chat_rooms table
 
-## resource_id
-자료 metadata의 고유 ID이다.
-Python 코드에서 uuid 문자열로 생성한다.
+AI 챗봇 대화방 metadata를 저장한다.
+
+```sql
+create table chat_rooms (
+  chat_room_id text primary key,
+  title text not null,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+```
+
+# chat_messages table
+
+AI 챗봇 대화 메시지를 저장한다.
+
+```sql
+create table chat_messages (
+  message_id text primary key,
+  chat_room_id text not null references chat_rooms(chat_room_id) on delete cascade,
+  role text not null,
+  content text not null,
+  sources jsonb default '[]'::jsonb,
+  model_name text,
+  retrieval_mode text,
+  created_at timestamp with time zone default now()
+);
+```
+
+# 주요 컬럼 설명
 
 ## owner_type
 자료 저장 범위이다.
@@ -56,10 +106,6 @@ Python 코드에서 uuid 문자열로 생성한다.
 - report
 - file
 
-현재 Supabase 전환 대상:
-- meeting_note
-- report
-
 ## source_type
 자료 생성 출처이다.
 
@@ -69,87 +115,33 @@ Python 코드에서 uuid 문자열로 생성한다.
 - common_document
 - uploaded_file
 
-현재 Supabase 전환 대상:
-- generated_meeting_note
-- generated_report
-
-## title
-자료관리 화면에 표시할 제목이다.
-
-## file_name
-Storage에 저장한 파일명이다.
-
-예:
-- 아동보호_정책_보고서_20260712_120000.md
-- 주간회의_20260712_130000.md
-
-## file_path
-파일 위치를 표현하는 문자열이다.
-
-Supabase 산출물은 다음 형식을 사용한다.
-```text
-supabase://generated-files/reports/file.md
-```
-
 ## storage_bucket
-Supabase Storage bucket 이름이다.
-
-기본값:
-```text
-generated-files
-```
+파일이 저장된 Supabase Storage bucket 이름이다.
 
 ## storage_path
 Supabase Storage 내부 파일 경로이다.
 
-예:
-```text
-reports/file.md
-meeting_notes/file.md
-```
-
 ## source_document_id
-공통 문서에서 파생된 자료일 경우 원본 문서 ID를 저장한다.
-보고서와 회의록 생성 산출물에서는 null로 둔다.
-
-## created_at
-자료 등록 시각이다.
-
-# 자료관리 조회 기준
-
-개인 자료 조회:
-```sql
-select * from resources
-where owner_type = 'personal'
-order by created_at desc;
-```
-
-Teams 자료 조회:
-```sql
-select * from resources
-where owner_type = 'teams'
-order by created_at desc;
-```
-
-보고서 필터:
-```sql
-select * from resources
-where owner_type = 'personal'
-and resource_type = 'report'
-order by created_at desc;
-```
-
-회의록 필터:
-```sql
-select * from resources
-where owner_type = 'personal'
-and resource_type = 'meeting_note'
-order by created_at desc;
-```
+공통 문서에서 파생된 자료일 경우 원본 document_id를 저장한다.
 
 # ERD
 
 ```text
+documents
+---------
+document_id PK
+file_name
+category
+file_type
+file_hash
+file_path
+storage_bucket
+storage_path
+status
+status_message
+is_active
+created_at
+
 resources
 ---------
 resource_id PK
@@ -163,7 +155,22 @@ storage_bucket
 storage_path
 source_document_id
 created_at
-```
 
-현재 버전에서는 단일 table로 자료관리 metadata를 관리한다.
-향후 사용자 인증이 추가되면 users table과 owner_id 관계를 추가한다.
+chat_rooms
+----------
+chat_room_id PK
+title
+created_at
+updated_at
+
+chat_messages
+-------------
+message_id PK
+chat_room_id FK
+role
+content
+sources
+model_name
+retrieval_mode
+created_at
+```

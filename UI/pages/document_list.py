@@ -1,39 +1,23 @@
 import streamlit as st
-import json
 from datetime import datetime
 from core.document_pipeline import update_document_active_status
 from core.document_pipeline import METADATA_PATH, VECTOR_STORE_DIR
-from core.document_download import read_document_file_for_download
 from core.rag_update import rebuild_vector_store
 from core.resource_manager import add_common_document_to_personal_resources
+from core.supabase_document_manager import create_document_signed_url
+from core.supabase_document_manager import get_documents_by_category as get_supabase_documents_by_category
 
 CATEGORIES = ["규정", "내규", "법령", "판례", "보도자료"]
 
 
 # 문서 metadata 파일을 읽어 전체 문서 목록을 가져온다.
 def load_document_metadata():
-    if not METADATA_PATH.exists():
-        return []
-
-    with METADATA_PATH.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    return []
     
 
 # 선택한 카테고리의 문서만 최신순으로 정렬한다.
 def get_documents_by_category(selected_category):
-    documents = load_document_metadata()
-
-    filtered_documents = [
-        document
-        for document in documents
-        if document.get("category") == selected_category
-    ]
-
-    return sorted(
-        filtered_documents,
-        key=lambda document: document.get("created_at", ""),
-        reverse=True,
-    )
+    return get_supabase_documents_by_category(selected_category)
 
 
 # ISO 형식의 생성일을 화면 표시용 날짜로 변환한다.
@@ -46,24 +30,15 @@ def format_created_at(created_at):
 
 # 문서 목록의 다운로드 버튼을 표시한다.
 def render_document_download_button(document):
-    file_path = document.get("file_path")
+    signed_url_result = create_document_signed_url(document)
 
-    if not file_path:
-        st.warning("원본 파일 경로가 없습니다.")
+    if not signed_url_result["success"]:
+        st.warning(signed_url_result["message"])
         return
 
-    download_result = read_document_file_for_download(file_path)
-
-    if not download_result["success"]:
-        st.warning(download_result["error_message"])
-        return
-
-    st.download_button(
+    st.link_button(
         "다운로드",
-        data=download_result["file_bytes"],
-        file_name=document.get("file_name", "download"),
-        mime="application/octet-stream",
-        key=f"document_download_{document['document_id']}",
+        signed_url_result["url"],
         use_container_width=True,
     )
 

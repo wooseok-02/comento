@@ -4,8 +4,6 @@ from core.document_download import read_document_file_for_download
 from core.resource_manager import get_resources_by_owner
 from core.resource_manager import get_resources_by_owner_and_type
 from core.supabase_resource_manager import create_resource_signed_url
-from core.supabase_resource_manager import get_supabase_resources_by_owner
-from core.supabase_resource_manager import get_supabase_resources_by_owner_and_type
 
 
 OWNER_LABELS = {
@@ -57,20 +55,15 @@ def render_resource_type_filter(owner_type):
 # 선택한 저장 범위와 자료 유형에 맞는 자료 목록을 가져온다.
 def get_filtered_resources(owner_type, selected_resource_type):
     if selected_resource_type is None:
-        local_resources = get_resources_by_owner(owner_type=owner_type)
-        supabase_resources = get_supabase_resources_by_owner(owner_type=owner_type)
+        resources = get_resources_by_owner(owner_type=owner_type)
     else:
-        local_resources = get_resources_by_owner_and_type(
-            owner_type=owner_type,
-            resource_type=selected_resource_type,
-        )
-        supabase_resources = get_supabase_resources_by_owner_and_type(
+        resources = get_resources_by_owner_and_type(
             owner_type=owner_type,
             resource_type=selected_resource_type,
         )
 
     return sorted(
-        local_resources + supabase_resources,
+        resources,
         key=lambda resource: resource.get("created_at", ""),
         reverse=True,
     )

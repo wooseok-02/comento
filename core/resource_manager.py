@@ -2,6 +2,9 @@ from pathlib import Path
 import json
 from datetime import datetime
 import uuid
+from core.supabase_resource_manager import add_common_document_to_personal_supabase_resources
+from core.supabase_resource_manager import get_supabase_resources_by_owner
+from core.supabase_resource_manager import get_supabase_resources_by_owner_and_type
 
 
 # 개인/팀 자료 metadata를 저장할 위치를 정의한다.
@@ -71,20 +74,7 @@ def get_resources_by_owner_and_type(
     resource_type,
     resources_path=RESOURCES_PATH,
 ):
-    resources = load_resources(resources_path)
-
-    filtered_resources = [
-        resource
-        for resource in resources
-        if resource.get("owner_type") == owner_type
-        and resource.get("resource_type") == resource_type
-    ]
-
-    return sorted(
-        filtered_resources,
-        key=lambda resource: resource.get("created_at", ""),
-        reverse=True,
-    )
+    return get_supabase_resources_by_owner_and_type(owner_type, resource_type)
 
 
 # 저장 범위에 해당하는 전체 자료 목록을 최신순으로 가져온다.
@@ -92,19 +82,7 @@ def get_resources_by_owner(
     owner_type,
     resources_path=RESOURCES_PATH,
 ):
-    resources = load_resources(resources_path)
-
-    filtered_resources = [
-        resource
-        for resource in resources
-        if resource.get("owner_type") == owner_type
-    ]
-
-    return sorted(
-        filtered_resources,
-        key=lambda resource: resource.get("created_at", ""),
-        reverse=True,
-    )
+    return get_supabase_resources_by_owner(owner_type)
 
 
 # 공통 문서가 이미 같은 저장 범위의 자료로 저장되어 있는지 확인한다.
@@ -131,35 +109,4 @@ def add_common_document_to_personal_resources(
     document_metadata,
     resources_path=RESOURCES_PATH,
 ):
-    document_id = document_metadata.get("document_id")
-
-    if is_duplicate_common_document_resource(
-        owner_type="personal",
-        source_document_id=document_id,
-        resources_path=resources_path,
-    ):
-        return {
-            "success": False,
-            "status": "duplicated",
-            "message": "이미 내 자료에 저장된 문서입니다.",
-            "resource": None,
-        }
-
-    resource_metadata = create_resource_metadata(
-        owner_type="personal",
-        resource_type="file",
-        source_type="common_document",
-        title=document_metadata.get("file_name", "알 수 없는 문서"),
-        file_name=document_metadata.get("file_name", "알 수 없는 문서"),
-        file_path=document_metadata.get("file_path"),
-        source_document_id=document_id,
-    )
-
-    append_resource(resource_metadata, resources_path)
-
-    return {
-        "success": True,
-        "status": "completed",
-        "message": "내 자료에 저장되었습니다.",
-        "resource": resource_metadata,
-    }
+    return add_common_document_to_personal_supabase_resources(document_metadata)

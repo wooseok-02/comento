@@ -13,15 +13,11 @@ ChatOpenAI
 StrOutputParser
 """
 
-from pathlib import Path
-
-from langchain_community.vectorstores import FAISS
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
-# LangChain FAISS 벡터 저장소 위치를 정의한다.
-VECTOR_STORE_DIR = Path("store/vector")
+from core.chroma_vector_store import get_chroma_vector_store
 
 # 챗봇 답변 생성에 사용할 모델명을 정의한다.
 CHAT_MODEL_NAME = "gpt-4o-mini"
@@ -48,21 +44,9 @@ NO_RELEVANT_DOCUMENT_ANSWER = (
 DEFAULT_ERROR_ANSWER = "답변을 생성하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
 
-# 저장된 FAISS 벡터 DB를 불러온다.
-def load_vector_store(vector_store_dir=VECTOR_STORE_DIR):
-    index_file_path = vector_store_dir / "index.faiss"
-    metadata_file_path = vector_store_dir / "index.pkl"
-
-    if not index_file_path.exists() or not metadata_file_path.exists():
-        raise FileNotFoundError("저장된 벡터 DB가 없습니다. RAG 문서 업데이트를 먼저 실행하세요.")
-
-    embeddings = OpenAIEmbeddings()
-
-    return FAISS.load_local(
-        folder_path=str(vector_store_dir),
-        embeddings=embeddings,
-        allow_dangerous_deserialization=True,
-    )
+# Chroma Cloud 벡터 DB를 불러온다.
+def load_vector_store():
+    return get_chroma_vector_store()
 
 
 # 사용자 질문과 유사한 내부 문서 청크를 점수와 함께 검색한다.
@@ -126,6 +110,8 @@ def build_sources(documents):
             "title": metadata.get("file_name", "알 수 없는 문서"),
             "document_id": document_id,
             "file_path": metadata.get("file_path"),
+            "storage_bucket": metadata.get("storage_bucket"),
+            "storage_path": metadata.get("storage_path"),
             "category": metadata.get("category"),
         }
 

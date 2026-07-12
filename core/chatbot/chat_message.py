@@ -3,8 +3,12 @@ import json
 from datetime import datetime
 import uuid
 
+from core.supabase_client import get_supabase_client
+from core.supabase_client import is_supabase_configured
+
 # 대화 메시지 목록을 저장할 위치를 정의한다.
 CHAT_MESSAGES_PATH = Path("store/chat/chat_messages.json")
+SUPABASE_CHAT_MESSAGES_TABLE = "chat_messages"
 
 
 # 현재 시간을 ISO 문자열로 생성한다.
@@ -14,35 +18,40 @@ def get_current_datetime():
 
 # 대화 메시지 저장 파일을 읽어 전체 메시지 목록을 가져온다.
 def load_chat_messages(chat_messages_path=CHAT_MESSAGES_PATH):
-    if not chat_messages_path.exists():
+    if not is_supabase_configured():
         return []
 
-    with chat_messages_path.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    supabase = get_supabase_client()
+    response = (
+        supabase.table(SUPABASE_CHAT_MESSAGES_TABLE)
+        .select("*")
+        .order("created_at")
+        .execute()
+    )
+
+    return response.data or []
 
 
 # 전체 대화 메시지 목록을 JSON 파일로 저장한다.
 def save_chat_messages(messages, chat_messages_path=CHAT_MESSAGES_PATH):
-    chat_messages_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with chat_messages_path.open("w", encoding="utf-8") as file:
-        json.dump(messages, file, ensure_ascii=False, indent=2)
+    return messages
 
 
 # 특정 대화방에 속한 메시지를 생성 시간순으로 가져온다.
 def get_messages_by_room(chat_room_id, chat_messages_path=CHAT_MESSAGES_PATH):
-    messages = load_chat_messages(chat_messages_path)
+    if not is_supabase_configured():
+        return []
 
-    room_messages = [
-        message
-        for message in messages
-        if message.get("chat_room_id") == chat_room_id
-    ]
-
-    return sorted(
-        room_messages,
-        key=lambda message: message.get("created_at", ""),
+    supabase = get_supabase_client()
+    response = (
+        supabase.table(SUPABASE_CHAT_MESSAGES_TABLE)
+        .select("*")
+        .eq("chat_room_id", chat_room_id)
+        .order("created_at")
+        .execute()
     )
+
+    return response.data or []
 
 
 # 대화 메시지 metadata를 생성한다.
@@ -85,8 +94,6 @@ def append_chat_message(
     retrieval_mode=None,
     chat_messages_path=CHAT_MESSAGES_PATH,
 ):
-    messages = load_chat_messages(chat_messages_path)
-
     message = create_chat_message(
         chat_room_id=chat_room_id,
         role=role,
@@ -96,8 +103,15 @@ def append_chat_message(
         retrieval_mode=retrieval_mode,
     )
 
-    messages.append(message)
-    save_chat_messages(messages, chat_messages_path)
+    supabase = get_supabase_client()
+    response = (
+        supabase.table(SUPABASE_CHAT_MESSAGES_TABLE)
+        .insert(message)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
 
     return message
 

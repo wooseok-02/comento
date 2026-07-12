@@ -1,104 +1,138 @@
-# 배포 및 Supabase 저장소 시스템 흐름
+# 배포 및 외부 저장소 시스템 흐름
 
 ## 전체 구조
 
 ```text
 사용자
-→ Hugging Face Spaces Streamlit 앱
-→ OpenAI / Tavily API
+→ Streamlit Community Cloud 앱
 → Supabase Database
 → Supabase Storage
+→ Chroma Cloud
+→ OpenAI / Tavily API
 ```
 
-# Hugging Face Spaces 역할
+# Streamlit Community Cloud 역할
 
-Hugging Face Spaces는 Streamlit 앱 실행 환경이다.
+Streamlit Community Cloud는 앱 실행 환경이다.
 
 담당:
 - app.py 실행
 - UI 렌더링
+- Supabase API 호출
+- Chroma Cloud API 호출
 - OpenAI API 호출
 - Tavily 웹 검색 호출
-- Supabase API 호출
 
 주의:
-- Space 내부 파일 시스템은 영구 저장소로 보장하지 않는다.
-- 따라서 생성 산출물은 Supabase에 저장한다.
+- Streamlit Cloud 내부 파일 시스템은 영구 저장소로 보장하지 않는다.
+- 따라서 운영 데이터는 Supabase와 Chroma Cloud에 저장한다.
 
 # Supabase 역할
 
-Supabase는 생성 산출물 저장소이다.
+Supabase는 서비스 데이터와 파일 원본 저장소이다.
 
 담당:
-- 보고서 markdown 파일 저장
-- 회의록 markdown 파일 저장
+- 문서 원본 파일 저장
+- 문서 metadata 저장
 - 자료관리 metadata 저장
-- 자료관리 목록 조회
-- 다운로드 URL 생성
+- 챗봇 대화방 저장
+- 챗봇 메시지 저장
+- 보고서/회의록 markdown 파일 저장
+- 다운로드 signed URL 생성
 
-# 저장 흐름: 보고서
+# Chroma Cloud 역할
+
+Chroma Cloud는 RAG 검색 저장소이다.
+
+담당:
+- 문서 chunk 저장
+- embedding vector 저장
+- chunk metadata 저장
+- similarity search 수행
+
+# 문서 업로드 흐름
 
 ```text
-보고서 생성
-→ 사용자가 보고서 저장 클릭
-→ core/report_storage.py
-→ markdown content 생성
-→ core/supabase_resource_manager.py
-→ Supabase Storage generated-files/reports/ 업로드
-→ Supabase resources table insert
-→ 저장 성공 응답
+문서 업로드
+→ 파일 형식 검증
+→ 파일 hash 생성
+→ Supabase documents table에서 중복 확인
+→ Supabase Storage uploaded-documents 업로드
+→ Supabase documents table insert
+→ 업로드 완료
 ```
 
-# 저장 흐름: 회의록
+# RAG 업데이트 흐름
 
 ```text
-회의록 생성
-→ 사용자가 회의록 편집
-→ 사용자가 회의록 저장 클릭
-→ core/meeting_storage.py
-→ markdown content 생성
-→ core/supabase_resource_manager.py
-→ Supabase Storage generated-files/meeting_notes/ 업로드
+RAG 문서 업데이트 클릭
+→ Supabase documents table에서 active/completed 문서 조회
+→ Supabase Storage에서 원본 파일 다운로드
+→ 텍스트 추출
+→ chunk 분할
+→ Chroma Cloud collection 초기화
+→ Chroma Cloud에 chunk documents 저장
+→ 업데이트 완료
+```
+
+# AI 챗봇 답변 흐름
+
+```text
+사용자 질문 입력
+→ Supabase chat_messages에 user message 저장
+→ Chroma Cloud similarity_search_with_score 실행
+→ 검색 결과를 context로 변환
+→ ChatOpenAI 답변 생성
+→ 출처 metadata 생성
+→ Supabase chat_messages에 assistant message 저장
+→ 화면 표시
+```
+
+# 보고서 생성 흐름
+
+```text
+보고서 입력값 제출
+→ LangGraph validate_input
+→ Chroma Cloud 내부 문서 검색
+→ Tavily 웹 검색
+→ 내부 문서와 웹 검색 결과 병합
+→ ChatOpenAI 보고서 생성
+→ 사용자가 저장 클릭
+→ Supabase Storage generated-files/reports 업로드
 → Supabase resources table insert
-→ 저장 성공 응답
+```
+
+# 회의록 저장 흐름
+
+```text
+음성 파일 업로드
+→ STT
+→ 회의록 markdown 생성
+→ 사용자가 편집
+→ 사용자가 저장 클릭
+→ Supabase Storage generated-files/meeting_notes 업로드
+→ Supabase resources table insert
 ```
 
 # 자료관리 조회 흐름
 
 ```text
 자료관리 페이지 진입
-→ UI/pages/resource_list.py
-→ 로컬 resources.json 조회
+→ owner_type 선택
+→ resource_type 필터 선택
 → Supabase resources table 조회
-→ 두 목록 병합
 → 최신순 정렬
 → 화면 표시
 ```
 
-로컬 자료:
-- 공통 문서에서 개인 자료로 저장한 파일
-
-Supabase 자료:
-- 생성된 보고서
-- 생성된 회의록
-
 # 다운로드 흐름
 
-## 로컬 파일 다운로드
-
 ```text
-자료 metadata에 storage_path 없음
-→ file_path를 로컬 파일 경로로 판단
-→ read_document_file_for_download 호출
-→ st.download_button 표시
-```
-
-## Supabase 파일 다운로드
-
-```text
-자료 metadata에 storage_path 있음
+다운로드 클릭
+→ metadata의 storage_bucket/storage_path 확인
 → Supabase Storage signed URL 생성
-→ st.link_button으로 다운로드 링크 표시
+→ Streamlit link_button 표시
+→ 사용자가 파일 다운로드
 ```
 
 # 환경변수 흐름
@@ -110,10 +144,11 @@ Supabase 자료:
 → os.environ
 ```
 
-Hugging Face Spaces:
+Streamlit Community Cloud:
 ```text
-Repository secrets
-→ os.environ
+App secrets
+→ st.secrets
+→ app.py에서 os.environ으로 복사
 ```
 
 필수 secrets:
@@ -121,45 +156,25 @@ Repository secrets
 - TAVILY_API_KEY
 - SUPABASE_URL
 - SUPABASE_SERVICE_ROLE_KEY
-
-선택 secrets:
 - SUPABASE_STORAGE_BUCKET
+- SUPABASE_DOCUMENT_BUCKET
+- CHROMA_API_KEY
+- CHROMA_TENANT
+- CHROMA_DATABASE
+- CHROMA_COLLECTION_NAME
 
-# 현재 유지하는 로컬 저장소
+# 배포 체크리스트
 
-아래 기능은 현재 버전에서 로컬 파일 기반을 유지한다.
-
-- 공통 문서 업로드
-- 공통 문서 metadata
-- FAISS vector store
-- AI 챗봇 대화방
-- AI 챗봇 메시지
-
-이유:
-- 오늘 배포 범위에서 전체 저장소 이전은 작업량이 크다.
-- 학습 효과가 큰 생성 산출물 저장 흐름부터 클라우드화한다.
-
-# 향후 운영 구조
-
-운영 환경에서는 다음 구조로 확장한다.
-
-```text
-문서 원본 파일 → Supabase Storage 또는 S3
-문서 metadata → Supabase DB
-자료관리 metadata → Supabase DB
-채팅방/메시지 → Supabase DB
-vector store → pgvector 또는 managed vector DB
-생성 산출물 → Supabase Storage 또는 S3
-```
-
-# Hugging Face Spaces 배포 체크리스트
-
-1. GitHub 또는 Hugging Face repository에 코드 업로드
-2. requirements.txt 확인
-3. Space SDK를 Streamlit으로 선택
-4. app.py를 진입점으로 설정
-5. Repository secrets 등록
-6. Supabase resources table 생성
-7. Supabase generated-files bucket 생성
-8. Space build 완료 확인
-9. 배포 URL 접속 확인
+1. Supabase project 생성
+2. Supabase Storage bucket 생성
+3. Supabase SQL Editor에서 table 생성
+4. Chroma Cloud database 생성
+5. Chroma Cloud API key 발급
+6. Chroma collection 이름 결정
+7. Streamlit Community Cloud App secrets 등록
+8. GitHub repository에 코드 반영
+9. Streamlit Community Cloud 재배포
+10. 문서 업로드 확인
+11. RAG 문서 업데이트 확인
+12. 챗봇 답변 확인
+13. 자료관리 다운로드 확인

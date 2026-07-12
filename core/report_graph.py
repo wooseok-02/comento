@@ -1,9 +1,6 @@
 from typing import TypedDict, List, Dict, Any, Optional
 
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
-
-from core.document_pipeline import VECTOR_STORE_DIR
+from core.chroma_vector_store import get_chroma_vector_store
 from langchain_tavily import TavilySearch
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -94,13 +91,7 @@ def retrieve_internal_documents_node(state):
         }
 
     try:
-        embeddings = OpenAIEmbeddings()
-
-        vector_store = FAISS.load_local(
-            str(VECTOR_STORE_DIR),
-            embeddings,
-            allow_dangerous_deserialization=True,
-        )
+        vector_store = get_chroma_vector_store()
 
         documents = vector_store.similarity_search(
             query,

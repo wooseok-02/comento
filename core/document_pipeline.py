@@ -2,15 +2,20 @@ from pathlib import Path
 import hashlib
 import json
 from datetime import datetime
-import uuid
+from io import BytesIO
 
 ALLOWED_EXTENSIONS = {"pdf", "txt", "md"}
 # 업로드된 원본 문서를 저장할 위치를 정의한다.
 ORIGINALS_DIR = Path("store/originals")
 # 문서 metadata 파일을 저장할 위치를 정의한다.
 METADATA_PATH = Path("store/metadata/documents.json")
-# LangChain FAISS 벡터 저장소 위치를 정의한다.
+# 이전 로컬 벡터 저장소 인자 호환을 위해 남겨둔 경로를 정의한다.
 VECTOR_STORE_DIR = Path("store/vector")
+
+from core.supabase_document_manager import get_all_documents
+from core.supabase_document_manager import is_duplicate_document_hash
+from core.supabase_document_manager import save_uploaded_document_to_supabase
+from core.supabase_document_manager import update_supabase_document_active_status
 
 
 
@@ -32,11 +37,7 @@ def calculate_file_hash(file_bytes):
 
 # 3.문서 metadata 파일을 읽어 문서 목록을 가져온다.
 def load_document_metadata(metadata_path):
-    if not metadata_path.exists():
-        return []
-
-    with metadata_path.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    return get_all_documents()
     
 # 4.문서 metadata 목록을 JSON 파일로 저장한다.
 def save_document_metadata(metadata_path, documents):
@@ -133,14 +134,33 @@ def extract_text_from_file(file_path, file_type):
     raise ValueError("올바르지 않은 문서 형식")
 
 
+# Supabase에서 내려받은 원본 파일 bytes에서 텍스트를 추출한다.
+def extract_text_from_file_bytes(file_bytes, file_type):
+    if file_type == "pdf":
+        reader = PdfReader(BytesIO(file_bytes))
+        pages = []
+
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                pages.append(page_text)
+
+        return "\n".join(pages)
+
+    if file_type in ["txt", "md"]:
+        return file_bytes.decode("utf-8")
+
+    raise ValueError("올바르지 않은 문서 형식")
+
+
 
 from langchain_core.documents import Document
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from core.chroma_vector_store import get_chroma_vector_store
 
-# 10.추출된 문서 텍스트를 청크화, 임베딩, FAISS 벡터 DB 저장까지 수행한다.
+
+# 10.추출된 문서 텍스트를 청크화하고 Chroma Cloud에 저장한다.
 def save_rag_document(extracted_text, document_metadata, vector_store_dir):
     # RAG 저장에 사용할 텍스트가 비어 있는지 확인한다.
     if not extracted_text.strip():
@@ -167,27 +187,13 @@ def save_rag_document(extracted_text, document_metadata, vector_store_dir):
     # LangChain splitter를 사용해 Document를 청크 Document 목록으로 변환한다.
     split_documents = text_splitter.split_documents([document])
 
-    # OpenAI Embeddings 모델을 준비한다.
-    embeddings = OpenAIEmbeddings()
-
-    # 기존 FAISS 벡터 DB가 있으면 불러오고, 없으면 새로 생성한다.
-    index_file_path = vector_store_dir / "index.faiss"
-    metadata_file_path = vector_store_dir / "index.pkl"
-    
-    if index_file_path.exists() and metadata_file_path.exists():
-        vector_store = FAISS.load_local(
-            folder_path=str(vector_store_dir),
-            embeddings=embeddings,
-            allow_dangerous_deserialization=True,
-        )
-        vector_store.add_documents(split_documents)
-    else:
-        vector_store = FAISS.from_documents(
-            documents=split_documents,
-            embedding=embeddings,
-        )
-    # 변경된 FAISS 벡터 DB를 지정된 저장소에 저장한다.
-    vector_store.save_local(str(vector_store_dir))
+    # Chroma Cloud에 문서 청크를 저장한다.
+    vector_store = get_chroma_vector_store()
+    vector_ids = [
+        f"{document_metadata['document_id']}_{index}"
+        for index, document in enumerate(split_documents)
+    ]
+    vector_store.add_documents(documents=split_documents, ids=vector_ids)
 
     return len(split_documents)
 
@@ -228,10 +234,8 @@ def process_uploaded_document(uploaded_file, category, progress_callback=None):
     notify("문서 중복 확인", "진행중")
     file_hash = calculate_file_hash(file_bytes)
 
-    # 기존 문서 metadata를 읽어 중복 문서가 있는지 확인한다.
-    existing_documents = load_document_metadata(METADATA_PATH)
-
-    if is_duplicate_file_hash(existing_documents, file_hash):
+    # Supabase documents table에서 중복 문서가 있는지 확인한다.
+    if is_duplicate_document_hash(file_hash):
         notify("문서 중복 확인", "실패", "이미 등록된 문서입니다.")
         return {
             "success": False,
@@ -241,77 +245,40 @@ def process_uploaded_document(uploaded_file, category, progress_callback=None):
 
     notify("문서 중복 확인", "완료")
 
-    # 새 문서를 식별하기 위한 고유 ID를 생성한다.
-    document_id = str(uuid.uuid4())
-
-    # 업로드된 원본 파일을 원본 저장소에 저장한다.
+    # 업로드된 원본 파일을 Supabase 원본 저장소에 저장한다.
     notify("문서 원문 저장", "진행중")
-    saved_file_path = save_original_file(
-        ORIGINALS_DIR,
-        document_id,
-        file_name,
-        file_bytes,
-    )
-    notify("문서 원문 저장", "완료")
-
-    # 저장된 문서에 대한 metadata를 생성한다.
-    document_metadata = create_document_metadata(
-        document_id=document_id,
-        file_name=file_name,
-        category=category,
-        file_type=file_type,
-        file_path=saved_file_path,
-        file_hash=file_hash,
-    )
-
     try:
-        # 저장된 문서를 RAG 검색에 사용할 수 있도록 저장한다.
-        notify("RAG 문서 저장", "진행중")
-        extracted_text = extract_text_from_file(saved_file_path, file_type)
-
-        chunk_count = save_rag_document(
-            extracted_text=extracted_text,
-            document_metadata=document_metadata,
-            vector_store_dir=VECTOR_STORE_DIR,
+        document_metadata = save_uploaded_document_to_supabase(
+            file_name=file_name,
+            file_type=file_type,
+            category=category,
+            file_hash=file_hash,
+            file_bytes=file_bytes,
+            content_type=getattr(uploaded_file, "type", None),
         )
     except Exception as error:
-        if saved_file_path.exists():
-            saved_file_path.unlink()
-
-        notify("RAG 문서 저장", "실패", str(error))
+        notify("문서 원문 저장", "실패", str(error))
         return {
             "success": False,
             "status": "failed",
-            "message": f"RAG 문서 저장 중 오류가 발생했습니다: {error}",
+            "message": f"문서 원문 저장 중 오류가 발생했습니다: {error}",
         }
 
-    notify("RAG 문서 저장", "완료", f"{chunk_count}개 청크 저장")
+    notify("문서 원문 저장", "완료")
 
-    document_metadata["status_message"] = f"RAG 문서 저장 완료: {chunk_count}개 청크"
-
-    # RAG 저장까지 완료된 문서만 metadata 저장소에 추가한다.
+    # 문서 metadata 저장이 완료되었음을 표시한다.
     notify("상태 업데이트", "진행중")
-    append_document_metadata(METADATA_PATH, document_metadata)
     notify("상태 업데이트", "완료")
 
     return {
         "success": True,
         "status": "completed",
-        "message": "문서 업로드 및 RAG 저장이 완료되었습니다.",
-        "document_id": document_id,
+        "message": "문서 업로드가 완료되었습니다. RAG 문서 업데이트를 실행하면 AI 검색에 반영됩니다.",
+        "document_id": document_metadata["document_id"],
         "file_name": file_name,
-        "chunk_count": chunk_count,
+        "chunk_count": 0,
     }
 
 # 문서 활성상태 변경
 def update_document_active_status(metadata_path, document_id, is_active):
-    documents = load_document_metadata(metadata_path)
-
-    for document in documents:
-        if document.get("document_id") == document_id:
-            document["is_active"] = is_active
-            break
-
-    save_document_metadata(metadata_path, documents)
-
-    return documents
+    return update_supabase_document_active_status(document_id, is_active)
