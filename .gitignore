@@ -1,0 +1,13 @@
+./venv/
+venv/
+/venv
+venv
+
+.env
+/.env
+
+store
+/store
+
+output
+/output
