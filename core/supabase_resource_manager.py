@@ -23,7 +23,7 @@ def get_current_datetime():
 
 # Supabase Storage key에 사용할 파일명을 안전한 문자열로 변환한다.
 def sanitize_storage_file_name(file_name):
-    safe_file_name = re.sub(r'[\\/:*?"<>|#%{}^~\[\]`]', "_", file_name)
+    safe_file_name = re.sub(r"[^A-Za-z0-9._-]", "_", file_name)
     safe_file_name = re.sub(r"\s+", "_", safe_file_name)
     safe_file_name = re.sub(r"_+", "_", safe_file_name).strip("._")
 
