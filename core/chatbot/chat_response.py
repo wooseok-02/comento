@@ -180,33 +180,57 @@ def create_chat_response_result(success, answer, sources=None, error_message=Non
 def generate_chat_response(question):
     try:
         documents_with_score = retrieve_documents_with_score(question)
+    except Exception as error:
+        return create_chat_response_result(
+            success=False,
+            answer="문서 검색 중 오류가 발생했습니다.",
+            sources=[],
+            error_message=f"retrieve_documents_with_score: {error}",
+        )
+
+    try:
         documents = filter_documents_by_score(documents_with_score)
+    except Exception as error:
+        return create_chat_response_result(
+            success=False,
+            answer="검색 결과 필터링 중 오류가 발생했습니다.",
+            sources=[],
+            error_message=f"filter_documents_by_score: {error}",
+        )
 
-        if not documents:
-            return create_chat_response_result(
-                success=True,
-                answer=NO_RELEVANT_DOCUMENT_ANSWER,
-                sources=[],
-            )
+    if not documents:
+        return create_chat_response_result(
+            success=True,
+            answer=NO_RELEVANT_DOCUMENT_ANSWER,
+            sources=[],
+        )
 
+    try:
         context = format_retrieved_documents(documents)
         sources = build_sources(documents)
+    except Exception as error:
+        return create_chat_response_result(
+            success=False,
+            answer="검색 문서 처리 중 오류가 발생했습니다.",
+            sources=[],
+            error_message=f"format/build_sources: {error}",
+        )
 
+    try:
         answer = generate_rag_answer(
             question=question,
             context=context,
         )
-
-        return create_chat_response_result(
-            success=True,
-            answer=answer,
-            sources=sources,
-        )
-
     except Exception as error:
         return create_chat_response_result(
             success=False,
-            answer=DEFAULT_ERROR_ANSWER,
-            sources=[],
-            error_message=str(error),
+            answer="LLM 답변 생성 중 오류가 발생했습니다.",
+            sources=sources,
+            error_message=f"generate_rag_answer: {error}",
         )
+
+    return create_chat_response_result(
+        success=True,
+        answer=answer,
+        sources=sources,
+    )
