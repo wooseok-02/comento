@@ -4,6 +4,7 @@ from datetime import datetime
 
 from core.supabase_client import get_supabase_client
 from core.supabase_client import is_supabase_configured
+from core.supabase_resource_manager import sanitize_storage_file_name
 
 
 SUPABASE_DOCUMENTS_TABLE = "documents"
@@ -22,7 +23,9 @@ def get_current_datetime():
 
 # Supabase Storage에 저장할 문서 경로를 생성한다.
 def create_document_storage_path(document_id, file_name):
-    return f"documents/{document_id}/{file_name}"
+    safe_file_name = sanitize_storage_file_name(file_name)
+
+    return f"documents/{document_id}/{safe_file_name}"
 
 
 # 업로드 문서 원본 파일을 Supabase Storage에 저장한다.
