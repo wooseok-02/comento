@@ -2,7 +2,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from core.chroma_vector_store import reset_chroma_collection
-from core.document_pipeline import extract_text_from_file_bytes
+from core.document_text_extractor import extract_text_from_file_bytes
 from core.supabase_document_manager import download_document_file_bytes
 from core.supabase_document_manager import get_active_completed_documents as get_supabase_active_completed_documents
 

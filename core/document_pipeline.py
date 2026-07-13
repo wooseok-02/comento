@@ -2,7 +2,6 @@ from pathlib import Path
 import hashlib
 import json
 from datetime import datetime
-from io import BytesIO
 
 ALLOWED_EXTENSIONS = {"pdf", "txt", "md"}
 # 업로드된 원본 문서를 저장할 위치를 정의한다.
@@ -16,6 +15,8 @@ from core.supabase_document_manager import get_all_documents
 from core.supabase_document_manager import is_duplicate_document_hash
 from core.supabase_document_manager import save_uploaded_document_to_supabase
 from core.supabase_document_manager import update_supabase_document_active_status
+from core.document_text_extractor import extract_text_from_file
+from core.document_text_extractor import extract_text_from_file_bytes
 
 
 
@@ -110,49 +111,6 @@ def update_document_status(metadata_path, document_id, status, status_message):
     save_document_metadata(metadata_path, documents)
 
     return documents
-
-from pypdf import PdfReader
-
-
-# 9.저장된 원본 문서에서 텍스트를 추출한다.
-#벡터화시키기 위한 준비과정 1
-def extract_text_from_file(file_path, file_type):
-    if file_type == "pdf":
-        reader = PdfReader(file_path)
-        pages = []
-
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                pages.append(page_text)
-
-        return "\n".join(pages)
-
-    if file_type in ["txt", "md"]:
-        return file_path.read_text(encoding="utf-8")
-
-    raise ValueError("올바르지 않은 문서 형식")
-
-
-# Supabase에서 내려받은 원본 파일 bytes에서 텍스트를 추출한다.
-def extract_text_from_file_bytes(file_bytes, file_type):
-    if file_type == "pdf":
-        reader = PdfReader(BytesIO(file_bytes))
-        pages = []
-
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                pages.append(page_text)
-
-        return "\n".join(pages)
-
-    if file_type in ["txt", "md"]:
-        return file_bytes.decode("utf-8")
-
-    raise ValueError("올바르지 않은 문서 형식")
-
-
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
