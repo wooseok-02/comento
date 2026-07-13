@@ -41,7 +41,7 @@ NO_RELEVANT_DOCUMENT_ANSWER = (
 )
 
 # 답변 생성 중 오류가 발생했을 때 사용자에게 보여줄 답변을 정의한다.
-DEFAULT_ERROR_ANSWER = "답변을 생성하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요."
+DEFAULT_ERROR_ANSWER = "답변을 생성하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요..."
 
 
 # Chroma Cloud 벡터 DB를 불러온다.

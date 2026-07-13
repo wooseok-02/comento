@@ -164,10 +164,10 @@ def render_chat_input_area(chat_room_id):
         )
 
         response = generate_chat_response(user_input)
-        
+
         if not response["success"]:
             st.error(response["error_message"])
-        
+            return 
 
         append_assistant_message(
             chat_room_id=chat_room_id,
