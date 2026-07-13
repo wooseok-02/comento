@@ -33,7 +33,11 @@ def get_chroma_client():
     if not is_chroma_cloud_configured():
         raise ValueError("Chroma Cloud 환경변수가 설정되지 않았습니다.")
 
-    return chromadb.CloudClient()
+    return chromadb.CloudClient(
+        api_key=os.getenv("CHROMA_API_KEY"),
+        tenant=os.getenv("CHROMA_TENANT"),
+        database=os.getenv("CHROMA_DATABASE"),
+    )
 
 
 # LangChain Chroma vector store를 생성한다.
