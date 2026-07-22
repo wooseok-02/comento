@@ -55,6 +55,12 @@ def render_main_page():
     st.info("왼쪽 사이드바에서 사용할 메뉴를 선택하세요.")
 
 
+# 준비 중인 OCR 문서 분석 화면을 표시한다.
+def render_ocr_analysis_page():
+    st.title("OCR 문서 분석")
+    st.info("OCR 문서 분석 기능은 준비 중입니다.")
+
+
 # 사이드바를 항상 표시하고 선택된 페이지 값을 가져온다.
 selected_page = render_sidebar()
 
@@ -74,5 +80,7 @@ elif selected_page == "report_create":
     render_report_create_page()
 elif selected_page == "meeting_create":
     render_meeting_create_page()
+elif selected_page == "ocr_analysis":
+    render_ocr_analysis_page()
 else:
     render_main_page()

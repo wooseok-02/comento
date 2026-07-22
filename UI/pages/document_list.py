@@ -10,11 +10,6 @@ from core.supabase_document_manager import get_documents_by_category as get_supa
 CATEGORIES = ["규정", "내규", "법령", "판례", "보도자료"]
 
 
-# 문서 metadata 파일을 읽어 전체 문서 목록을 가져온다.
-def load_document_metadata():
-    return []
-    
-
 # 선택한 카테고리의 문서만 최신순으로 정렬한다.
 def get_documents_by_category(selected_category):
     return get_supabase_documents_by_category(selected_category)

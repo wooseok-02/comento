@@ -18,7 +18,6 @@ def render_document_upload_page():
 
     # 업로드 버튼 클릭 전에도 기존 처리 과정 영역을 표시한다.
     refresh_process_area()
-    st.write(st.session_state["document_processes"])
 
     # 업로드 버튼 클릭 시 문서 저장 파이프라인과 처리 과정 UI를 연결한다.
     if upload_button:

@@ -62,6 +62,10 @@ def render_report_create_page():
         st.divider()
 
         st.subheader("보고서 미리보기")
+
+        if report_preview.get("generated_without_sources"):
+            st.warning("참고자료 없이 생성됨")
+
         st.markdown(report_preview["content"])
 
         sources = report_preview.get("sources", [])

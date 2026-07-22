@@ -9,6 +9,8 @@ from openai import OpenAI
 MEETING_NOTE_MODEL_NAME = "gpt-4o-mini"
 STT_MODEL_NAME = "whisper-1"
 SUPPORTED_AUDIO_EXTENSIONS = ["mp3", "wav", "m4a"]
+MAX_AUDIO_FILE_SIZE_BYTES = 25 * 1024 * 1024
+MAX_AUDIO_FILE_SIZE_MB = 25
 
 
 # 회의 생성에 필요한 입력값과 음성 파일 형식을 검증한다.
@@ -55,6 +57,17 @@ def validate_meeting_input(
         return {
             "success": False,
             "message": "mp3, wav, m4a 형식의 음성 파일만 업로드할 수 있습니다.",
+        }
+
+    file_size = getattr(uploaded_audio_file, "size", None)
+
+    if file_size is None:
+        file_size = len(uploaded_audio_file.getbuffer())
+
+    if file_size > MAX_AUDIO_FILE_SIZE_BYTES:
+        return {
+            "success": False,
+            "message": f"회의 음성 파일은 {MAX_AUDIO_FILE_SIZE_MB}MB 이하만 업로드할 수 있습니다.",
         }
 
     return {

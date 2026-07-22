@@ -1,4 +1,5 @@
 from typing import TypedDict, List, Dict, Any, Optional
+import logging
 
 from core.chroma_vector_store import get_chroma_vector_store
 from langchain_tavily import TavilySearch
@@ -9,6 +10,8 @@ from langgraph.graph import StateGraph, END
 REPORT_MODEL_NAME = "gpt-4o-mini"
 INTERNAL_SEARCH_K = 5
 WEB_SEARCH_K = 5
+
+logger = logging.getLogger(__name__)
 
 
 class ReportState(TypedDict, total=False):
@@ -22,12 +25,15 @@ class ReportState(TypedDict, total=False):
 
     internal_documents: List[Any]
     internal_sources: List[Dict[str, Any]]
+    internal_search_error: Optional[str]
 
     web_results: List[Dict[str, Any]]
     web_sources: List[Dict[str, Any]]
+    web_search_error: Optional[str]
 
     merged_context: str
     sources: List[Dict[str, Any]]
+    generated_without_sources: bool
 
     report_content: str
 
@@ -119,6 +125,7 @@ def retrieve_internal_documents_node(state):
         }
 
     except Exception as error:
+        logger.warning("Internal document search failed: %s", error, exc_info=True)
         return {
             "internal_documents": [],
             "internal_sources": [],
@@ -178,6 +185,7 @@ def search_web_node(state):
         }
 
     except Exception as error:
+        logger.warning("Web search failed: %s", error, exc_info=True)
         return {
             "web_results": [],
             "web_sources": [],
@@ -225,6 +233,7 @@ def merge_context_node(state):
     return {
         "merged_context": merged_context,
         "sources": sources,
+        "generated_without_sources": not bool(sources),
     }
 
 # 통합 참고자료를 기반으로 markdown 형식의 보고서를 생성한다.
@@ -368,5 +377,6 @@ def generate_report_preview(title, topic, purpose, owner_type):
             "owner_type": final_state.get("owner_type"),
             "content": final_state.get("report_content"),
             "sources": final_state.get("sources", []),
+            "generated_without_sources": final_state.get("generated_without_sources", False),
         },
     }

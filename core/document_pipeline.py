@@ -1,6 +1,5 @@
 from pathlib import Path
 import hashlib
-import json
 from datetime import datetime
 
 ALLOWED_EXTENSIONS = {"pdf", "txt", "md"}
@@ -11,7 +10,6 @@ METADATA_PATH = Path("store/metadata/documents.json")
 # 이전 로컬 벡터 저장소 인자 호환을 위해 남겨둔 경로를 정의한다.
 VECTOR_STORE_DIR = Path("store/vector")
 
-from core.supabase_document_manager import get_all_documents
 from core.supabase_document_manager import is_duplicate_document_hash
 from core.supabase_document_manager import save_uploaded_document_to_supabase
 from core.supabase_document_manager import update_supabase_document_active_status
@@ -36,26 +34,7 @@ def calculate_file_hash(file_bytes):
     return hashlib.sha256(file_bytes).hexdigest()
 
 
-# 3.문서 metadata 파일을 읽어 문서 목록을 가져온다.
-def load_document_metadata(metadata_path):
-    return get_all_documents()
-    
-# 4.문서 metadata 목록을 JSON 파일로 저장한다.
-def save_document_metadata(metadata_path, documents):
-    metadata_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with metadata_path.open("w", encoding="utf-8") as file:
-        json.dump(documents, file, ensure_ascii=False, indent=2)
-
-# 5.기존 문서 metadata에서 같은 파일 해시가 있는지 확인한다.
-def is_duplicate_file_hash(existing_documents, new_file_hash):
-    for document_metadata in existing_documents:
-        if document_metadata.get("file_hash") == new_file_hash:
-            return True
-
-    return False
-
-# 6.업로드된 원본 파일을 지정한 저장 위치에 저장한다.
+# 3.업로드된 원본 파일을 지정한 저장 위치에 저장한다.
 #경로를 추후에 내 실제 저장공간으로 바꾼다.
 def save_original_file(originals_dir,document_id, file_name, file_bytes,):
     originals_dir.mkdir(parents=True, exist_ok=True)
@@ -68,7 +47,7 @@ def save_original_file(originals_dir,document_id, file_name, file_bytes,):
     return saved_file_path
 
 
-# 7.저장된 문서에 대한 metadata 항목을 생성한다.
+# 4.저장된 문서에 대한 metadata 항목을 생성한다.
 def create_document_metadata(
     document_id,
     file_name,
@@ -90,35 +69,13 @@ def create_document_metadata(
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
 
-# 8.문서 metadata 목록에 새 문서 metadata를 추가한다.
-def append_document_metadata(metadata_path, document_metadata):
-    documents = load_document_metadata(metadata_path)
-    documents.append(document_metadata)
-    save_document_metadata(metadata_path, documents)
-
-    return documents
-
-# 9.문서 metadata에서 특정 문서의 처리 상태와 메시지를 변경한다.
-def update_document_status(metadata_path, document_id, status, status_message):
-    documents = load_document_metadata(metadata_path)
-
-    for document in documents:
-        if document.get("document_id") == document_id:
-            document["status"] = status
-            document["status_message"] = status_message
-            break
-
-    save_document_metadata(metadata_path, documents)
-
-    return documents
-
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from core.chroma_vector_store import get_chroma_vector_store
 
 
-# 10.추출된 문서 텍스트를 청크화하고 Chroma Cloud에 저장한다.
+# 5.추출된 문서 텍스트를 청크화하고 Chroma Cloud에 저장한다.
 def save_rag_document(extracted_text, document_metadata, vector_store_dir):
     # RAG 저장에 사용할 텍스트가 비어 있는지 확인한다.
     if not extracted_text.strip():

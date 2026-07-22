@@ -1,12 +1,24 @@
 import os
+import logging
 
 import chromadb
+import streamlit as st
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 
 
 DEFAULT_CHROMA_COLLECTION_NAME = "worldvision_documents"
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+
+logger = logging.getLogger(__name__)
+
+
+# Chroma 버전별 list_collections 반환 형태를 collection 이름으로 정규화한다.
+def get_collection_name(collection):
+    if isinstance(collection, str):
+        return collection
+
+    return collection.name
 
 
 # Chroma collection 이름을 환경변수에서 가져온다.
@@ -29,6 +41,7 @@ def is_chroma_cloud_configured():
 
 
 # Chroma Cloud client를 생성한다.
+@st.cache_resource
 def get_chroma_client():
     if not is_chroma_cloud_configured():
         raise ValueError("Chroma Cloud 환경변수가 설정되지 않았습니다.")
@@ -55,9 +68,21 @@ def reset_chroma_collection():
     collection_name = get_chroma_collection_name()
 
     try:
-        client.delete_collection(collection_name)
-    except Exception:
-        pass
+        collection_names = [
+            get_collection_name(collection)
+            for collection in client.list_collections()
+        ]
+    except Exception as error:
+        logger.warning("Failed to list Chroma collections before reset: %s", error, exc_info=True)
+        collection_names = None
+
+    if collection_names is not None and collection_name not in collection_names:
+        logger.info("Chroma collection does not exist before reset: %s", collection_name)
+    else:
+        try:
+            client.delete_collection(collection_name)
+        except Exception as error:
+            logger.warning("Failed to delete Chroma collection during reset: %s", error, exc_info=True)
 
     return Chroma(
         client=client,

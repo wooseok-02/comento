@@ -1,6 +1,7 @@
 import streamlit as st
 
 from core.meeting_pipeline import generate_meeting_note_preview
+from core.meeting_pipeline import MAX_AUDIO_FILE_SIZE_BYTES, MAX_AUDIO_FILE_SIZE_MB
 from core.meeting_storage import save_generated_meeting_note
 
 
@@ -33,6 +34,19 @@ def render_meeting_note_editor():
     )
 
 
+# 업로드된 음성 파일 크기가 STT 처리 한도 안에 있는지 확인한다.
+def is_audio_file_size_valid(uploaded_audio_file):
+    if uploaded_audio_file is None:
+        return True
+
+    file_size = getattr(uploaded_audio_file, "size", None)
+
+    if file_size is None:
+        file_size = len(uploaded_audio_file.getbuffer())
+
+    return file_size <= MAX_AUDIO_FILE_SIZE_BYTES
+
+
 # 회의 생성 페이지의 전체 화면을 구성한다.
 def render_meeting_create_page():
     initialize_meeting_create_state()
@@ -57,9 +71,15 @@ def render_meeting_create_page():
     uploaded_audio_file = st.file_uploader(
         "회의 음성 파일",
         type=["mp3", "wav", "m4a"],
+        help=f"OpenAI Whisper API 제한에 따라 {MAX_AUDIO_FILE_SIZE_MB}MB 이하 파일만 처리할 수 있습니다.",
     )
 
-    st.caption("원본 음성 파일은 회의록 생성 후 저장하지 않습니다.")
+    st.caption(f"원본 음성 파일은 회의록 생성 후 저장하지 않습니다. {MAX_AUDIO_FILE_SIZE_MB}MB 이하 파일만 업로드하세요.")
+
+    is_valid_audio_size = is_audio_file_size_valid(uploaded_audio_file)
+
+    if not is_valid_audio_size:
+        st.warning(f"회의 음성 파일은 {MAX_AUDIO_FILE_SIZE_MB}MB 이하만 업로드할 수 있습니다.")
 
     owner_label = st.radio(
         "저장 위치",
@@ -73,6 +93,7 @@ def render_meeting_create_page():
         "회의록 생성",
         type="primary",
         use_container_width=True,
+        disabled=not is_valid_audio_size,
     )
 
     if generate_button:

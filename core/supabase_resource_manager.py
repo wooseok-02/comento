@@ -5,6 +5,7 @@ from datetime import datetime
 
 from core.supabase_client import get_supabase_client
 from core.supabase_client import is_supabase_configured
+from core.supabase_client import create_storage_signed_url
 
 
 SUPABASE_RESOURCES_TABLE = "resources"
@@ -231,31 +232,9 @@ def create_resource_signed_url(resource, expires_in=3600):
     storage_bucket = resource.get("storage_bucket") or get_supabase_storage_bucket()
     storage_path = resource.get("storage_path")
 
-    if not storage_path:
-        return {
-            "success": False,
-            "url": None,
-            "message": "Supabase Storage 경로가 없습니다.",
-        }
-
-    try:
-        supabase = get_supabase_client()
-        response = (
-            supabase.storage.from_(storage_bucket)
-            .create_signed_url(storage_path, expires_in)
-        )
-
-        signed_url = response.get("signedURL") or response.get("signedUrl")
-
-        return {
-            "success": bool(signed_url),
-            "url": signed_url,
-            "message": None if signed_url else "다운로드 URL을 생성하지 못했습니다.",
-        }
-
-    except Exception as error:
-        return {
-            "success": False,
-            "url": None,
-            "message": str(error),
-        }
+    return create_storage_signed_url(
+        storage_bucket=storage_bucket,
+        storage_path=storage_path,
+        expires_in=expires_in,
+        missing_path_message="Supabase Storage 경로가 없습니다.",
+    )
